@@ -5,6 +5,7 @@ import {
   parseProjectPackage,
   slugify,
   type ComicBookVideoProjectPackage,
+  type MotionBeat,
   type MotionSequence,
 } from './project-package'
 import { sampleComicBookVideoProject } from './sample-project'
@@ -38,25 +39,77 @@ function App() {
     persist(updater(project))
   }
 
-  const addSequence = () => {
-    updateProject((current) => {
-      const sequence: MotionSequence = {
-        id: crypto.randomUUID(),
-        title: `Sequence ${current.scenes.length + 1}`,
-        sourcePage: current.scenes.length + 1,
-        sourcePanels: '1-3',
-        runtimeSeconds: 10,
-        motionPlan: 'Slow push, layered parallax, rain particles, caption fades.',
-        narrationNotes: '',
-        soundNotes: '',
-      }
+  const metrics = useMemo(() => {
+    const totalRuntime = project.scenes.reduce((sum, scene) => sum + scene.runtimeSeconds, 0)
+    const totalBeats = project.scenes.reduce((sum, scene) => sum + scene.beats.length, 0)
 
-      return {
-        ...current,
-        scenes: [...current.scenes, sequence],
-        updatedAt: new Date().toISOString(),
-      }
-    })
+    return {
+      sequences: project.scenes.length,
+      runtime: totalRuntime,
+      beats: totalBeats,
+      outputs: project.outputs.length,
+    }
+  }, [project])
+
+  const addSequence = () => {
+    updateProject((current) => ({
+      ...current,
+      scenes: [
+        ...current.scenes,
+        {
+          id: crypto.randomUUID(),
+          title: `Sequence ${current.scenes.length + 1}`,
+          sourcePage: current.scenes.length + 1,
+          sourcePanels: '1-2',
+          runtimeSeconds: 10,
+          transitionIn: '',
+          transitionOut: '',
+          motionPlan: '',
+          narrationNotes: '',
+          soundNotes: '',
+          beats: [
+            {
+              id: crypto.randomUUID(),
+              label: 'Beat 1',
+              sourcePanel: '1',
+              durationSeconds: 4,
+              movement: '',
+              captionOverlay: '',
+              narration: '',
+              soundCue: '',
+            },
+          ],
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    }))
+  }
+
+  const addBeat = (sequenceId: string) => {
+    updateProject((current) => ({
+      ...current,
+      scenes: current.scenes.map((sequence) =>
+        sequence.id === sequenceId
+          ? {
+              ...sequence,
+              beats: [
+                ...sequence.beats,
+                {
+                  id: crypto.randomUUID(),
+                  label: `Beat ${sequence.beats.length + 1}`,
+                  sourcePanel: String(sequence.beats.length + 1),
+                  durationSeconds: 4,
+                  movement: '',
+                  captionOverlay: '',
+                  narration: '',
+                  soundCue: '',
+                },
+              ],
+            }
+          : sequence,
+      ),
+      updatedAt: new Date().toISOString(),
+    }))
   }
 
   const addOutput = () => {
@@ -75,7 +128,6 @@ function App() {
     }))
   }
 
-  const handleExport = () => exportProjectPackage(project)
   const handleImportClick = () => fileInputRef.current?.click()
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -97,16 +149,6 @@ function App() {
     }
   }
 
-  const metrics = useMemo(() => {
-    const totalRuntime = project.scenes.reduce((sum, scene) => sum + scene.runtimeSeconds, 0)
-    return {
-      sequences: project.scenes.length,
-      runtime: totalRuntime,
-      deliverables: project.outputs.length,
-      soundTargets: project.inputs.soundTargets.length,
-    }
-  }, [project])
-
   return (
     <div className="app-shell">
       <header className="hero">
@@ -114,11 +156,11 @@ function App() {
           <span className="eyebrow">Motion Comic Planner</span>
           <h1>Comic Book Video Generator</h1>
           <p>
-            Convert a comic issue package into a motion-comic video plan with panel sequencing,
-            narration beats, soundtrack notes, and delivery-ready timing structure.
+            Turn comic pages into motion-comic sequences with timeline beats, narration timing,
+            caption overlays, soundtrack cues, and cut-ready deliverables.
           </p>
           <div className="hero-actions">
-            <button onClick={handleExport}>Export Package</button>
+            <button onClick={() => exportProjectPackage(project)}>Export Package</button>
             <button className="secondary" onClick={handleImportClick}>
               Import Package
             </button>
@@ -137,8 +179,8 @@ function App() {
         <div className="metric-grid">
           <MetricCard label="Sequences" value={String(metrics.sequences)} />
           <MetricCard label="Runtime" value={formatDuration(metrics.runtime)} />
-          <MetricCard label="Outputs" value={String(metrics.deliverables)} />
-          <MetricCard label="Sound Targets" value={String(metrics.soundTargets)} />
+          <MetricCard label="Beat Blocks" value={String(metrics.beats)} />
+          <MetricCard label="Outputs" value={String(metrics.outputs)} />
         </div>
       </header>
 
@@ -147,7 +189,7 @@ function App() {
           <div className="panel-heading">
             <div>
               <span className="panel-kicker">Setup</span>
-              <h2>Comic source and direction</h2>
+              <h2>Source comic and direction</h2>
             </div>
           </div>
           <div className="field-grid">
@@ -170,6 +212,28 @@ function App() {
                 updateProject((current) => ({
                   ...current,
                   inputs: { ...current.inputs, targetFormat: value },
+                  updatedAt: new Date().toISOString(),
+                }))
+              }
+            />
+            <Field
+              label="Voice tone"
+              value={project.inputs.voiceTone}
+              onChange={(value) =>
+                updateProject((current) => ({
+                  ...current,
+                  inputs: { ...current.inputs, voiceTone: value },
+                  updatedAt: new Date().toISOString(),
+                }))
+              }
+            />
+            <Field
+              label="Edit rhythm"
+              value={project.inputs.editRhythm}
+              onChange={(value) =>
+                updateProject((current) => ({
+                  ...current,
+                  inputs: { ...current.inputs, editRhythm: value },
                   updatedAt: new Date().toISOString(),
                 }))
               }
@@ -197,37 +261,33 @@ function App() {
               }))
             }
           />
-          <TextArea
-            label="Sound targets"
-            value={project.inputs.soundTargets.join('\n')}
-            onChange={(value) =>
-              updateProject((current) => ({
-                ...current,
-                inputs: {
-                  ...current.inputs,
-                  soundTargets: value.split('\n').map((line) => line.trim()).filter(Boolean),
-                },
-                updatedAt: new Date().toISOString(),
-              }))
-            }
-          />
-          <TextArea
-            label="Working notes"
-            value={project.notes.join('\n')}
-            onChange={(value) =>
-              updateProject((current) => ({
-                ...current,
-                notes: value
-                  .split('\n')
-                  .map((line) => line.trim())
-                  .filter(Boolean),
-                updatedAt: new Date().toISOString(),
-              }))
-            }
-          />
+          <div className="field-grid">
+            <TextArea
+              label="Sound targets"
+              value={project.inputs.soundTargets.join('\n')}
+              onChange={(value) =>
+                updateProject((current) => ({
+                  ...current,
+                  inputs: { ...current.inputs, soundTargets: splitLines(value) },
+                  updatedAt: new Date().toISOString(),
+                }))
+              }
+            />
+            <TextArea
+              label="Delivery surfaces"
+              value={project.inputs.deliverySurfaces.join('\n')}
+              onChange={(value) =>
+                updateProject((current) => ({
+                  ...current,
+                  inputs: { ...current.inputs, deliverySurfaces: splitLines(value) },
+                  updatedAt: new Date().toISOString(),
+                }))
+              }
+            />
+          </div>
         </section>
 
-        <section className="panel">
+        <section className="panel panel-full">
           <div className="panel-heading">
             <div>
               <span className="panel-kicker">Sequences</span>
@@ -238,108 +298,22 @@ function App() {
             </button>
           </div>
           <div className="stack-list">
-            {project.scenes.map((sequence, index) => (
-              <article className="stack-card" key={sequence.id}>
-                <div className="field-grid">
-                  <Field
-                    label="Sequence title"
-                    value={sequence.title}
-                    onChange={(value) =>
-                      updateProject((current) => ({
-                        ...current,
-                        scenes: current.scenes.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, title: value } : item,
-                        ),
-                        updatedAt: new Date().toISOString(),
-                      }))
-                    }
-                  />
-                  <Field
-                    label="Source page"
-                    type="number"
-                    value={String(sequence.sourcePage)}
-                    onChange={(value) =>
-                      updateProject((current) => ({
-                        ...current,
-                        scenes: current.scenes.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, sourcePage: Number(value) || 0 } : item,
-                        ),
-                        updatedAt: new Date().toISOString(),
-                      }))
-                    }
-                  />
-                  <Field
-                    label="Source panels"
-                    value={sequence.sourcePanels}
-                    onChange={(value) =>
-                      updateProject((current) => ({
-                        ...current,
-                        scenes: current.scenes.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, sourcePanels: value } : item,
-                        ),
-                        updatedAt: new Date().toISOString(),
-                      }))
-                    }
-                  />
-                  <Field
-                    label="Runtime (seconds)"
-                    type="number"
-                    value={String(sequence.runtimeSeconds)}
-                    onChange={(value) =>
-                      updateProject((current) => ({
-                        ...current,
-                        scenes: current.scenes.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, runtimeSeconds: Number(value) || 0 }
-                            : item,
-                        ),
-                        updatedAt: new Date().toISOString(),
-                      }))
-                    }
-                  />
-                </div>
-                <TextArea
-                  label="Motion and transition plan"
-                  value={sequence.motionPlan}
-                  onChange={(value) =>
-                    updateProject((current) => ({
-                      ...current,
-                      scenes: current.scenes.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, motionPlan: value } : item,
-                      ),
-                      updatedAt: new Date().toISOString(),
-                    }))
-                  }
-                />
-                <div className="field-grid">
-                  <TextArea
-                    label="Narration notes"
-                    value={sequence.narrationNotes}
-                    onChange={(value) =>
-                      updateProject((current) => ({
-                        ...current,
-                        scenes: current.scenes.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, narrationNotes: value } : item,
-                        ),
-                        updatedAt: new Date().toISOString(),
-                      }))
-                    }
-                  />
-                  <TextArea
-                    label="Soundtrack and SFX notes"
-                    value={sequence.soundNotes}
-                    onChange={(value) =>
-                      updateProject((current) => ({
-                        ...current,
-                        scenes: current.scenes.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, soundNotes: value } : item,
-                        ),
-                        updatedAt: new Date().toISOString(),
-                      }))
-                    }
-                  />
-                </div>
-              </article>
+            {project.scenes.map((sequence, sequenceIndex) => (
+              <SequenceEditor
+                key={sequence.id}
+                sequence={sequence}
+                sequenceIndex={sequenceIndex}
+                onChange={(patch) => updateSequence(project, sequence.id, persist, patch)}
+                onRemove={() =>
+                  updateProject((current) => ({
+                    ...current,
+                    scenes: current.scenes.filter((item) => item.id !== sequence.id),
+                    updatedAt: new Date().toISOString(),
+                  }))
+                }
+                onAddBeat={() => addBeat(sequence.id)}
+                onUpdateBeat={(beatId, patch) => updateBeat(project, sequence.id, beatId, persist, patch)}
+              />
             ))}
           </div>
         </section>
@@ -357,7 +331,7 @@ function App() {
           <div className="stack-list">
             {project.outputs.map((output, index) => (
               <article className="stack-card" key={output.id}>
-                <div className="stack-header">
+                <div className="stack-header compact">
                   <strong>{output.label}</strong>
                   <button
                     className="ghost tiny"
@@ -416,6 +390,17 @@ function App() {
               </article>
             ))}
           </div>
+          <TextArea
+            label="Working notes"
+            value={project.notes.join('\n')}
+            onChange={(value) =>
+              updateProject((current) => ({
+                ...current,
+                notes: splitLines(value),
+                updatedAt: new Date().toISOString(),
+              }))
+            }
+          />
         </section>
       </main>
 
@@ -426,6 +411,188 @@ function App() {
         accept="application/json"
         onChange={handleImport}
       />
+    </div>
+  )
+}
+
+type SequenceEditorProps = {
+  sequence: MotionSequence
+  sequenceIndex: number
+  onChange: (patch: Partial<MotionSequence>) => void
+  onRemove: () => void
+  onAddBeat: () => void
+  onUpdateBeat: (beatId: string, patch: Partial<MotionBeat>) => void
+}
+
+function SequenceEditor({
+  sequence,
+  sequenceIndex,
+  onChange,
+  onRemove,
+  onAddBeat,
+  onUpdateBeat,
+}: SequenceEditorProps) {
+  return (
+    <article className="stack-card cinematic-card">
+      <div className="stack-header">
+        <div>
+          <strong>{sequence.title}</strong>
+          <p className="card-caption">Sequence {sequenceIndex + 1}</p>
+        </div>
+        <div className="inline-actions">
+          <button className="secondary tiny" onClick={onAddBeat}>
+            Add Beat
+          </button>
+          <button className="ghost tiny" onClick={onRemove}>
+            Remove Sequence
+          </button>
+        </div>
+      </div>
+      <div className="field-grid three-up">
+        <Field label="Sequence title" value={sequence.title} onChange={(value) => onChange({ title: value })} />
+        <Field
+          label="Source page"
+          type="number"
+          value={String(sequence.sourcePage)}
+          onChange={(value) => onChange({ sourcePage: Number(value) || 0 })}
+        />
+        <Field
+          label="Source panels"
+          value={sequence.sourcePanels}
+          onChange={(value) => onChange({ sourcePanels: value })}
+        />
+        <Field
+          label="Runtime"
+          type="number"
+          value={String(sequence.runtimeSeconds)}
+          onChange={(value) => onChange({ runtimeSeconds: Number(value) || 0 })}
+        />
+        <Field
+          label="Transition in"
+          value={sequence.transitionIn}
+          onChange={(value) => onChange({ transitionIn: value })}
+        />
+        <Field
+          label="Transition out"
+          value={sequence.transitionOut}
+          onChange={(value) => onChange({ transitionOut: value })}
+        />
+      </div>
+      <TextArea label="Motion plan" value={sequence.motionPlan} onChange={(value) => onChange({ motionPlan: value })} />
+      <div className="field-grid">
+        <TextArea
+          label="Narration notes"
+          value={sequence.narrationNotes}
+          onChange={(value) => onChange({ narrationNotes: value })}
+        />
+        <TextArea
+          label="Soundtrack and SFX notes"
+          value={sequence.soundNotes}
+          onChange={(value) => onChange({ soundNotes: value })}
+        />
+      </div>
+      <div className="subsection-heading">
+        <span>Timeline beats</span>
+        <strong>{sequence.beats.length} beat blocks</strong>
+      </div>
+      <div className="shot-grid">
+        {sequence.beats.map((beat) => (
+          <div className="shot-card" key={beat.id}>
+            <div className="field-grid">
+              <Field label="Label" value={beat.label} onChange={(value) => onUpdateBeat(beat.id, { label: value })} />
+              <Field
+                label="Source panel"
+                value={beat.sourcePanel}
+                onChange={(value) => onUpdateBeat(beat.id, { sourcePanel: value })}
+              />
+            </div>
+            <div className="field-grid">
+              <Field
+                label="Duration"
+                type="number"
+                value={String(beat.durationSeconds)}
+                onChange={(value) => onUpdateBeat(beat.id, { durationSeconds: Number(value) || 0 })}
+              />
+              <Field
+                label="Movement"
+                value={beat.movement}
+                onChange={(value) => onUpdateBeat(beat.id, { movement: value })}
+              />
+            </div>
+            <TextArea
+              label="Caption overlay"
+              value={beat.captionOverlay}
+              onChange={(value) => onUpdateBeat(beat.id, { captionOverlay: value })}
+            />
+            <div className="field-grid">
+              <TextArea
+                label="Narration"
+                value={beat.narration}
+                onChange={(value) => onUpdateBeat(beat.id, { narration: value })}
+              />
+              <TextArea
+                label="Sound cue"
+                value={beat.soundCue}
+                onChange={(value) => onUpdateBeat(beat.id, { soundCue: value })}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+  )
+}
+
+function updateSequence(
+  project: ComicBookVideoProjectPackage,
+  sequenceId: string,
+  persist: (project: ComicBookVideoProjectPackage) => void,
+  patch: Partial<MotionSequence>,
+) {
+  persist({
+    ...project,
+    scenes: project.scenes.map((sequence) =>
+      sequence.id === sequenceId ? { ...sequence, ...patch } : sequence,
+    ),
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+function updateBeat(
+  project: ComicBookVideoProjectPackage,
+  sequenceId: string,
+  beatId: string,
+  persist: (project: ComicBookVideoProjectPackage) => void,
+  patch: Partial<MotionBeat>,
+) {
+  persist({
+    ...project,
+    scenes: project.scenes.map((sequence) =>
+      sequence.id === sequenceId
+        ? {
+            ...sequence,
+            beats: sequence.beats.map((beat) => (beat.id === beatId ? { ...beat, ...patch } : beat)),
+          }
+        : sequence,
+    ),
+    updatedAt: new Date().toISOString(),
+  })
+}
+
+function splitLines(value: string) {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+type MetricCardProps = { label: string; value: string }
+
+function MetricCard({ label, value }: MetricCardProps) {
+  return (
+    <div className="metric-card">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   )
 }
@@ -458,20 +625,6 @@ function TextArea({ label, value, onChange }: TextAreaProps) {
       <span>{label}</span>
       <textarea rows={5} value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
-  )
-}
-
-type MetricCardProps = {
-  label: string
-  value: string
-}
-
-function MetricCard({ label, value }: MetricCardProps) {
-  return (
-    <div className="metric-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   )
 }
 
