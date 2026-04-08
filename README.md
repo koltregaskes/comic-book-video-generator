@@ -2,13 +2,15 @@
 
 Comic Book Video Generator converts comic packages into motion-comic video planning packages.
 
-## Included in v1
+## Included in the current build
 
 - import from `comic-book-generator`
 - panel-to-shot sequencing
+- nested motion beats inside each sequence
 - motion and transition notes
 - narration planning
 - soundtrack and SFX notes
+- deliverables and working-note management
 - JSON export/import
 - installable PWA support
 
@@ -20,3 +22,10 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:4303`
+
+The current baseline is designed to help you turn comic-page structure into:
+
+- motion-comic sequences
+- beat-level timing notes
+- narration and soundtrack plans
+- export-ready delivery packages
