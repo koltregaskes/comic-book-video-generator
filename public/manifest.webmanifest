@@ -1,0 +1,17 @@
+{
+  "name": "Comic Book Video Generator",
+  "short_name": "ComicVideo",
+  "description": "Turn comic packages into motion-comic video plans with timelines and sound notes.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07111f",
+  "theme_color": "#07111f",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

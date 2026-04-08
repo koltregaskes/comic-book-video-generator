@@ -1,0 +1,9 @@
+{
+  "slug": "comic-book-video-generator",
+  "title": "Comic Book Video Generator",
+  "category": "creative",
+  "ownerSession": "comic-book-video-generator-session",
+  "launchMode": "local-pwa",
+  "primaryPort": 4303,
+  "projectType": "comic-book-video"
+}
