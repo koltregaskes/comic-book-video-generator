@@ -29,3 +29,9 @@ The current baseline is designed to help you turn comic-page structure into:
 - beat-level timing notes
 - narration and soundtrack plans
 - export-ready delivery packages
+
+## Local-Only Files
+
+- `.autolab/` is used for internal AutoResearch and should remain untracked
+- `.env*` files are local-only
+- `.local/` and `*.local.md` are for planning notes and are ignored
