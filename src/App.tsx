@@ -51,6 +51,58 @@ function App() {
     }
   }, [project])
 
+  const timingSummary = useMemo(() => {
+    let cursorSeconds = 0
+
+    const sequenceRows = project.scenes.map((sequence, index) => {
+      const runtimeSeconds = Math.max(0, Math.round(sequence.runtimeSeconds || 0))
+      const beatSeconds = sequence.beats.reduce(
+        (sum, beat) => sum + Math.max(0, Math.round(beat.durationSeconds || 0)),
+        0,
+      )
+      const startSeconds = cursorSeconds
+      const endSeconds = startSeconds + runtimeSeconds
+
+      cursorSeconds = endSeconds
+
+      return {
+        id: sequence.id,
+        index: index + 1,
+        title: sequence.title || `Sequence ${index + 1}`,
+        sourcePage: sequence.sourcePage,
+        sourcePanels: sequence.sourcePanels,
+        runtimeSeconds,
+        beatCount: sequence.beats.length,
+        beatSeconds,
+        startSeconds,
+        endSeconds,
+        beatCoverage:
+          runtimeSeconds > 0 ? Math.min(100, Math.round((beatSeconds / runtimeSeconds) * 100)) : 0,
+      }
+    })
+
+    const longestSequence = sequenceRows.reduce<(typeof sequenceRows)[number] | null>(
+      (longest, current) => (!longest || current.runtimeSeconds > longest.runtimeSeconds ? current : longest),
+      null,
+    )
+
+    const totalBeatSeconds = sequenceRows.reduce((sum, row) => sum + row.beatSeconds, 0)
+    const totalRuntimeSeconds = sequenceRows.reduce((sum, row) => sum + row.runtimeSeconds, 0)
+    const totalBeatCount = sequenceRows.reduce((sum, row) => sum + row.beatCount, 0)
+
+    return {
+      sequenceRows,
+      totalRuntimeSeconds,
+      totalBeatSeconds,
+      totalBeatCount,
+      averageSequenceSeconds: sequenceRows.length
+        ? Math.round(totalRuntimeSeconds / sequenceRows.length)
+        : 0,
+      averageBeatSeconds: totalBeatCount ? Math.max(1, Math.round(totalBeatSeconds / totalBeatCount)) : 0,
+      longestSequence,
+    }
+  }, [project])
+
   const addSequence = () => {
     updateProject((current) => ({
       ...current,
@@ -197,6 +249,65 @@ function App() {
           <MetricCard label="Outputs" value={String(metrics.outputs)} />
         </div>
       </header>
+
+      <section className="panel panel-full timing-panel">
+        <div className="panel-heading">
+          <div>
+            <span className="panel-kicker">Planning cue sheet</span>
+            <h2>Timing summary</h2>
+          </div>
+          <div className="inline-actions">
+            <span className="helper-chip">
+              {timingSummary.sequenceRows.length} sequence{timingSummary.sequenceRows.length === 1 ? '' : 's'}
+            </span>
+            <span className="helper-chip">{formatDuration(timingSummary.totalRuntimeSeconds)} total runtime</span>
+          </div>
+        </div>
+        <div className="metric-grid metric-grid--compact">
+          <MetricCard label="Total runtime" value={formatDuration(timingSummary.totalRuntimeSeconds)} />
+          <MetricCard label="Average sequence" value={formatDuration(timingSummary.averageSequenceSeconds)} />
+          <MetricCard label="Average beat" value={formatDuration(timingSummary.averageBeatSeconds)} />
+          <MetricCard label="Beat blocks" value={String(timingSummary.totalBeatCount)} />
+        </div>
+        <div className="summary-note">
+          <strong>Export note</strong>
+          <p>
+            The motion plan is easiest to export when each scene reads as a timed window, so this cue sheet
+            shows the sequence order, cumulative window, and beat coverage before you hand it off.
+          </p>
+        </div>
+        <div className="timeline-list">
+          {timingSummary.sequenceRows.length === 0 ? (
+            <div className="empty-state">Add a sequence to generate a runtime cue sheet.</div>
+          ) : (
+            timingSummary.sequenceRows.map((row) => (
+              <article className="timeline-row" key={row.id}>
+                <div className="timeline-row__copy">
+                  <strong>
+                    {row.index}. {row.title}
+                  </strong>
+                  <p className="card-caption">
+                    Page {row.sourcePage} | Panels {row.sourcePanels || 'TBD'} | {row.beatCount} beat block
+                    {row.beatCount === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <div className="timeline-row__meta">
+                  <span>{formatDuration(row.startSeconds)} - {formatDuration(row.endSeconds)}</span>
+                  <span>{formatDuration(row.runtimeSeconds)} runtime</span>
+                  <span>{formatDuration(row.beatSeconds)} of beats</span>
+                  <span>{row.beatCoverage}% beat coverage</span>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+        {timingSummary.longestSequence ? (
+          <p className="summary-footnote">
+            Longest scene: {timingSummary.longestSequence.title} at{' '}
+            {formatDuration(timingSummary.longestSequence.runtimeSeconds)}.
+          </p>
+        ) : null}
+      </section>
 
       <main className="workspace-grid">
         <section className="panel">
