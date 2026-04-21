@@ -103,6 +103,32 @@ function App() {
     }
   }, [project])
 
+  const cueSheetBrief = useMemo(() => {
+    const lines = [
+      `Comic motion brief: ${project.title || 'Untitled project'}`,
+      `Target format: ${project.inputs.targetFormat || 'Motion-comic deliverable'}`,
+      `Total runtime: ${formatDuration(timingSummary.totalRuntimeSeconds)}`,
+      `Sequences: ${timingSummary.sequenceRows.length}`,
+      `Beat blocks: ${timingSummary.totalBeatCount}`,
+    ]
+
+    if (timingSummary.longestSequence) {
+      lines.push(
+        `Longest scene: ${timingSummary.longestSequence.title} (${formatDuration(timingSummary.longestSequence.runtimeSeconds)})`,
+      )
+    }
+
+    lines.push('', 'Cue sheet')
+
+    timingSummary.sequenceRows.forEach((row) => {
+      lines.push(
+        `${row.index}. ${row.title} | ${formatDuration(row.startSeconds)}-${formatDuration(row.endSeconds)} | ${row.beatCount} beat${row.beatCount === 1 ? '' : 's'} | ${row.beatCoverage}% coverage`,
+      )
+    })
+
+    return lines.join('\n')
+  }, [project, timingSummary])
+
   const addSequence = () => {
     updateProject((current) => ({
       ...current,
@@ -193,6 +219,17 @@ function App() {
     }
   }
 
+  const handleCopyCueSheet = async () => {
+    try {
+      await navigator.clipboard.writeText(cueSheetBrief)
+      setImportMessage('Copied cue sheet brief')
+    } catch (error) {
+      setImportMessage(
+        error instanceof Error ? error.message : 'Copy failed. Check browser clipboard permissions.',
+      )
+    }
+  }
+
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) {
@@ -261,6 +298,9 @@ function App() {
               {timingSummary.sequenceRows.length} sequence{timingSummary.sequenceRows.length === 1 ? '' : 's'}
             </span>
             <span className="helper-chip">{formatDuration(timingSummary.totalRuntimeSeconds)} total runtime</span>
+            <button className="secondary tiny" onClick={handleCopyCueSheet}>
+              Copy Cue Sheet
+            </button>
           </div>
         </div>
         <div className="metric-grid metric-grid--compact">
@@ -275,6 +315,13 @@ function App() {
             The motion plan is easiest to export when each scene reads as a timed window, so this cue sheet
             shows the sequence order, cumulative window, and beat coverage before you hand it off.
           </p>
+        </div>
+        <div className="cue-sheet-preview">
+          <div className="cue-sheet-preview__header">
+            <strong>Handoff brief</strong>
+            <span>Copy-ready for editors, narration, or soundtrack planning.</span>
+          </div>
+          <pre>{cueSheetBrief}</pre>
         </div>
         <div className="timeline-list">
           {timingSummary.sequenceRows.length === 0 ? (
