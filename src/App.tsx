@@ -1,8 +1,21 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
+  IMPORT_CONTROL,
+  RENDER_MANIFEST_CONTROLS,
+  RENDER_ORCHESTRATION_CONTROLS,
+  describeImportedArtifact,
+  describeManifestControls,
+  describeOrchestrationControls,
+  type OperationFeedback,
+} from './app-control-contract'
+import {
+  createRenderHandoffManifest,
+  createRenderOrchestrationPlan,
   exportProjectPackage,
   formatDuration,
   parseProjectPackage,
+  reorderProjectSequences,
+  reorderSequenceBeats,
   slugify,
   type ComicBookVideoProjectPackage,
   type MotionBeat,
@@ -25,7 +38,11 @@ function App() {
       return sampleComicBookVideoProject
     }
   })
-  const [importMessage, setImportMessage] = useState('Ready')
+  const [operationFeedback, setOperationFeedback] = useState<OperationFeedback>({
+    tone: 'neutral',
+    message: 'Ready',
+    details: 'Import a comic handoff package or export a local render manifest when the timeline is ready.',
+  })
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const persist = (nextProject: ComicBookVideoProjectPackage) => {
@@ -102,6 +119,17 @@ function App() {
       longestSequence,
     }
   }, [project])
+
+  const renderHandoffManifest = useMemo(() => createRenderHandoffManifest(project), [project])
+  const renderOrchestrationPlan = useMemo(() => createRenderOrchestrationPlan(project), [project])
+  const manifestControlSummary = useMemo(
+    () => describeManifestControls(renderHandoffManifest),
+    [renderHandoffManifest],
+  )
+  const orchestrationControlSummary = useMemo(
+    () => describeOrchestrationControls(renderOrchestrationPlan),
+    [renderOrchestrationPlan],
+  )
 
   const cueSheetBrief = useMemo(() => {
     const lines = [
@@ -211,22 +239,127 @@ function App() {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(project, null, 2))
-      setImportMessage('Copied package JSON')
+      setOperationFeedback({
+        tone: 'success',
+        message: 'Copied package JSON',
+        details: 'The editable creative-project-package-v1 JSON is on the clipboard.',
+      })
     } catch (error) {
-      setImportMessage(
-        error instanceof Error ? error.message : 'Copy failed. Check browser clipboard permissions.',
-      )
+      setOperationFeedback({
+        tone: 'error',
+        message: 'Copy failed',
+        details: error instanceof Error ? error.message : 'Check browser clipboard permissions.',
+      })
     }
   }
 
   const handleCopyCueSheet = async () => {
     try {
       await navigator.clipboard.writeText(cueSheetBrief)
-      setImportMessage('Copied cue sheet brief')
+      setOperationFeedback({
+        tone: 'success',
+        message: 'Copied cue sheet brief',
+        details: 'The plain-text timing brief is on the clipboard.',
+      })
     } catch (error) {
-      setImportMessage(
-        error instanceof Error ? error.message : 'Copy failed. Check browser clipboard permissions.',
-      )
+      setOperationFeedback({
+        tone: 'error',
+        message: 'Cue sheet copy failed',
+        details: error instanceof Error ? error.message : 'Check browser clipboard permissions.',
+      })
+    }
+  }
+
+  const handleCopyArtifact = async (label: string, artifact: unknown) => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(artifact, null, 2))
+      setOperationFeedback({
+        tone: 'success',
+        message: `Copied ${label}`,
+        details: 'The selected render handoff artifact is on the clipboard.',
+      })
+    } catch (error) {
+      setOperationFeedback({
+        tone: 'error',
+        message: `${label} copy failed`,
+        details: error instanceof Error ? error.message : 'Check browser clipboard permissions.',
+      })
+    }
+  }
+
+  const handleExportArtifact = (label: string, suffix: string, artifact: unknown) => {
+    downloadJson(`${project.slug || 'comic-book-video'}-${suffix}.json`, artifact)
+    setOperationFeedback({
+      tone: 'success',
+      message: `Exported ${label}`,
+      details: 'A local JSON download was generated. No media render or external connector was started.',
+    })
+  }
+
+  const moveSequence = (sequenceId: string, direction: -1 | 1) => {
+    try {
+      updateProject((current) => {
+        const currentIndex = current.scenes.findIndex((sequence) => sequence.id === sequenceId)
+        const nextIndex = currentIndex + direction
+
+        if (currentIndex < 0 || nextIndex < 0 || nextIndex >= current.scenes.length) {
+          return current
+        }
+
+        const nextOrder = current.scenes.map((sequence) => sequence.id)
+        const [movedSequenceId] = nextOrder.splice(currentIndex, 1)
+        nextOrder.splice(nextIndex, 0, movedSequenceId)
+
+        return {
+          ...reorderProjectSequences(current, nextOrder),
+          updatedAt: new Date().toISOString(),
+        }
+      })
+      setOperationFeedback({
+        tone: 'success',
+        message: 'Sequence order updated',
+        details: 'The verified package reorder helper accepted the complete sequence order.',
+      })
+    } catch (error) {
+      setOperationFeedback({
+        tone: 'error',
+        message: 'Sequence reorder rejected',
+        details: error instanceof Error ? error.message : 'The sequence order could not be validated.',
+      })
+    }
+  }
+
+  const moveBeat = (sequenceId: string, beatId: string, direction: -1 | 1) => {
+    try {
+      updateProject((current) => {
+        const sequence = current.scenes.find((item) => item.id === sequenceId)
+        const currentIndex = sequence?.beats.findIndex((beat) => beat.id === beatId) ?? -1
+        const nextIndex = currentIndex + direction
+
+        if (!sequence || currentIndex < 0 || nextIndex < 0 || nextIndex >= sequence.beats.length) {
+          return current
+        }
+
+        const nextOrder = sequence.beats.map((beat) => beat.id)
+        const [movedBeatId] = nextOrder.splice(currentIndex, 1)
+        nextOrder.splice(nextIndex, 0, movedBeatId)
+
+        return {
+          ...reorderSequenceBeats(current, sequenceId, nextOrder),
+          updatedAt: new Date().toISOString(),
+        }
+      })
+      setOperationFeedback({
+        tone: 'success',
+        message: 'Beat order updated',
+        details: 'The verified package reorder helper accepted the complete beat order.',
+      })
+    } catch (error) {
+      setOperationFeedback({
+        tone: 'error',
+        message: 'Beat reorder rejected',
+        details: error instanceof Error ? error.message : 'The beat order could not be validated.',
+      })
     }
   }
 
@@ -238,12 +371,16 @@ function App() {
 
     try {
       const text = await file.text()
-      persist(parseProjectPackage(text))
-      setImportMessage(`Imported ${file.name}`)
+      const importedProject = parseProjectPackage(text)
+      const feedback = describeImportedArtifact(text, importedProject, file.name)
+      persist(importedProject)
+      setOperationFeedback(feedback)
     } catch (error) {
-      setImportMessage(
-        error instanceof Error ? error.message : 'Import failed. Check the JSON package.',
-      )
+      setOperationFeedback({
+        tone: 'error',
+        message: 'Import rejected',
+        details: error instanceof Error ? error.message : 'Check the JSON package. No changes were applied.',
+      })
     } finally {
       event.target.value = ''
     }
@@ -265,19 +402,26 @@ function App() {
               Copy JSON
             </button>
             <button className="secondary" onClick={handleImportClick}>
-              Import Package
+              {IMPORT_CONTROL.label}
             </button>
             <button
               className="ghost"
               onClick={() => {
                 persist(sampleComicBookVideoProject)
-                setImportMessage('Sample project loaded')
+                setOperationFeedback({
+                  tone: 'success',
+                  message: 'Sample project loaded',
+                  details: 'The local sample project replaced the current draft.',
+                })
               }}
             >
               Load Sample
             </button>
           </div>
-          <p className="helper-text">{importMessage}</p>
+          <div className={`feedback-box feedback-box--${operationFeedback.tone}`} role={operationFeedback.tone === 'error' ? 'alert' : 'status'}>
+            <strong>{operationFeedback.message}</strong>
+            {operationFeedback.details ? <span>{operationFeedback.details}</span> : null}
+          </div>
         </div>
         <div className="metric-grid">
           <MetricCard label="Sequences" value={String(metrics.sequences)} />
@@ -301,6 +445,30 @@ function App() {
             <button className="secondary tiny" onClick={handleCopyCueSheet}>
               Copy Cue Sheet
             </button>
+            <button
+              className="secondary tiny"
+              onClick={() => handleCopyArtifact('render handoff manifest', renderHandoffManifest)}
+            >
+              {RENDER_MANIFEST_CONTROLS.copyLabel}
+            </button>
+            <button
+              className="secondary tiny"
+              onClick={() => handleExportArtifact('render handoff manifest', 'render-handoff', renderHandoffManifest)}
+            >
+              {RENDER_MANIFEST_CONTROLS.exportLabel}
+            </button>
+            <button
+              className="secondary tiny"
+              onClick={() => handleCopyArtifact('render orchestration plan', renderOrchestrationPlan)}
+            >
+              {RENDER_ORCHESTRATION_CONTROLS.copyLabel}
+            </button>
+            <button
+              className="secondary tiny"
+              onClick={() => handleExportArtifact('render orchestration plan', 'render-orchestration', renderOrchestrationPlan)}
+            >
+              {RENDER_ORCHESTRATION_CONTROLS.exportLabel}
+            </button>
           </div>
         </div>
         <div className="metric-grid metric-grid--compact">
@@ -308,6 +476,93 @@ function App() {
           <MetricCard label="Average sequence" value={formatDuration(timingSummary.averageSequenceSeconds)} />
           <MetricCard label="Average beat" value={formatDuration(timingSummary.averageBeatSeconds)} />
           <MetricCard label="Beat blocks" value={String(timingSummary.totalBeatCount)} />
+        </div>
+        <div className={`handoff-status ${renderHandoffManifest.consistency.cutReady ? 'handoff-status--go' : 'handoff-status--review'}`}>
+          <div>
+            <span className="panel-kicker">Timeline consistency</span>
+            <h3>{manifestControlSummary.heading}</h3>
+            <p>{manifestControlSummary.details}</p>
+          </div>
+          <div className="consistency-stats">
+            <span>{manifestControlSummary.timelineLabel}</span>
+            <span>{manifestControlSummary.narrationLabel}</span>
+            <span>{manifestControlSummary.sfxLabel}</span>
+          </div>
+        </div>
+        <div className={`handoff-status ${renderOrchestrationPlan.readiness.goNoGo === 'GO' ? 'handoff-status--go' : 'handoff-status--review'}`}>
+          <div>
+            <span className="panel-kicker">Render orchestration</span>
+            <h3>{orchestrationControlSummary.heading}</h3>
+            <p>{orchestrationControlSummary.details}</p>
+          </div>
+          <div className="consistency-stats">
+            <span>{orchestrationControlSummary.passLabel}</span>
+            <span>{orchestrationControlSummary.taskLabel}</span>
+            <span>{orchestrationControlSummary.generationLabel}</span>
+          </div>
+        </div>
+        <div className="orchestration-grid" aria-label="Render orchestration passes">
+          {renderOrchestrationPlan.passes.map((pass) => (
+            <article className={`orchestration-pass orchestration-pass--${pass.status}`} key={pass.id}>
+              <span className="panel-kicker">{pass.stage}</span>
+              <strong>{pass.label}</strong>
+              <p>
+                {pass.taskCount} local task{pass.taskCount === 1 ? '' : 's'} · {pass.status === 'ready' ? 'ready' : 'needs review'}
+              </p>
+            </article>
+          ))}
+        </div>
+        {renderOrchestrationPlan.issues.length > 0 ? (
+          <div className="issue-list" aria-label="Render orchestration issues">
+            {renderOrchestrationPlan.issues.slice(0, 6).map((issue) => (
+              <div className={`issue-pill issue-pill--${issue.severity}`} key={issue.id}>
+                <strong>{issue.severity}</strong>
+                <span>{issue.summary}</span>
+              </div>
+            ))}
+            {renderOrchestrationPlan.issues.length > 6 ? (
+              <p className="summary-footnote">
+                {renderOrchestrationPlan.issues.length - 6} more orchestration issue
+                {renderOrchestrationPlan.issues.length - 6 === 1 ? '' : 's'} in the local queue plan.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {renderHandoffManifest.consistency.issues.length > 0 ? (
+          <div className="issue-list" aria-label="Timeline consistency issues">
+            {renderHandoffManifest.consistency.issues.slice(0, 6).map((issue) => (
+              <div className={`issue-pill issue-pill--${issue.severity}`} key={issue.id}>
+                <strong>{issue.severity}</strong>
+                <span>{issue.summary}</span>
+              </div>
+            ))}
+            {renderHandoffManifest.consistency.issues.length > 6 ? (
+              <p className="summary-footnote">
+                {renderHandoffManifest.consistency.issues.length - 6} more timing issue
+                {renderHandoffManifest.consistency.issues.length - 6 === 1 ? '' : 's'} in the manifest.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="artifact-actions" aria-label="Render handoff artifact controls">
+          <button
+            className="secondary tiny"
+            onClick={() => handleCopyArtifact('cut-ready timeline', renderHandoffManifest.timeline)}
+          >
+            Copy Timeline JSON
+          </button>
+          <button
+            className="secondary tiny"
+            onClick={() => handleCopyArtifact('narration script', renderHandoffManifest.narrationScript)}
+          >
+            Copy Narration JSON
+          </button>
+          <button
+            className="secondary tiny"
+            onClick={() => handleCopyArtifact('SFX cue list', renderHandoffManifest.sfxCueList)}
+          >
+            Copy SFX JSON
+          </button>
         </div>
         <div className="summary-note">
           <strong>Export note</strong>
@@ -343,6 +598,16 @@ function App() {
                   <span>{formatDuration(row.runtimeSeconds)} runtime</span>
                   <span>{formatDuration(row.beatSeconds)} of beats</span>
                   <span>{row.beatCoverage}% beat coverage</span>
+                  {renderHandoffManifest.timeline.find((sequence) => sequence.id === row.id)?.gapSeconds ? (
+                    <span className="timeline-warning">
+                      {formatDuration(renderHandoffManifest.timeline.find((sequence) => sequence.id === row.id)?.gapSeconds ?? 0)} gap
+                    </span>
+                  ) : null}
+                  {renderHandoffManifest.timeline.find((sequence) => sequence.id === row.id)?.overflowSeconds ? (
+                    <span className="timeline-error">
+                      {formatDuration(renderHandoffManifest.timeline.find((sequence) => sequence.id === row.id)?.overflowSeconds ?? 0)} overflow
+                    </span>
+                  ) : null}
                 </div>
               </article>
             ))
@@ -483,8 +748,12 @@ function App() {
                     updatedAt: new Date().toISOString(),
                   }))
                 }
+                canMoveUp={sequenceIndex > 0}
+                canMoveDown={sequenceIndex < project.scenes.length - 1}
+                onMoveSequence={(direction) => moveSequence(sequence.id, direction)}
                 onAddBeat={() => addBeat(sequence.id)}
                 onUpdateBeat={(beatId, patch) => updateBeat(project, sequence.id, beatId, persist, patch)}
+                onMoveBeat={(beatId, direction) => moveBeat(sequence.id, beatId, direction)}
               />
             ))}
           </div>
@@ -580,7 +849,7 @@ function App() {
         ref={fileInputRef}
         className="hidden-file-input"
         type="file"
-        accept="application/json"
+        accept={IMPORT_CONTROL.accept}
         onChange={handleImport}
       />
     </div>
@@ -592,8 +861,12 @@ type SequenceEditorProps = {
   sequenceIndex: number
   onChange: (patch: Partial<MotionSequence>) => void
   onRemove: () => void
+  canMoveUp: boolean
+  canMoveDown: boolean
+  onMoveSequence: (direction: -1 | 1) => void
   onAddBeat: () => void
   onUpdateBeat: (beatId: string, patch: Partial<MotionBeat>) => void
+  onMoveBeat: (beatId: string, direction: -1 | 1) => void
 }
 
 function SequenceEditor({
@@ -601,8 +874,12 @@ function SequenceEditor({
   sequenceIndex,
   onChange,
   onRemove,
+  canMoveUp,
+  canMoveDown,
+  onMoveSequence,
   onAddBeat,
   onUpdateBeat,
+  onMoveBeat,
 }: SequenceEditorProps) {
   return (
     <article className="stack-card cinematic-card">
@@ -612,6 +889,12 @@ function SequenceEditor({
           <p className="card-caption">Sequence {sequenceIndex + 1}</p>
         </div>
         <div className="inline-actions">
+          <button className="ghost tiny" disabled={!canMoveUp} onClick={() => onMoveSequence(-1)}>
+            Move Up
+          </button>
+          <button className="ghost tiny" disabled={!canMoveDown} onClick={() => onMoveSequence(1)}>
+            Move Down
+          </button>
           <button className="secondary tiny" onClick={onAddBeat}>
             Add Beat
           </button>
@@ -668,8 +951,23 @@ function SequenceEditor({
         <strong>{sequence.beats.length} beat blocks</strong>
       </div>
       <div className="shot-grid">
-        {sequence.beats.map((beat) => (
+        {sequence.beats.map((beat, beatIndex) => (
           <div className="shot-card" key={beat.id}>
+            <div className="shot-card__header">
+              <strong>{beat.label || `Beat ${beatIndex + 1}`}</strong>
+              <div className="inline-actions">
+                <button className="ghost tiny" disabled={beatIndex === 0} onClick={() => onMoveBeat(beat.id, -1)}>
+                  Move Up
+                </button>
+                <button
+                  className="ghost tiny"
+                  disabled={beatIndex === sequence.beats.length - 1}
+                  onClick={() => onMoveBeat(beat.id, 1)}
+                >
+                  Move Down
+                </button>
+              </div>
+            </div>
             <div className="field-grid">
               <Field label="Label" value={beat.label} onChange={(value) => onUpdateBeat(beat.id, { label: value })} />
               <Field
@@ -756,6 +1054,19 @@ function splitLines(value: string) {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
+}
+
+function downloadJson(fileName: string, payload: unknown) {
+  const file = new Blob([JSON.stringify(payload, null, 2)], {
+    type: 'application/json;charset=utf-8',
+  })
+  const url = URL.createObjectURL(file)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = fileName
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 type MetricCardProps = { label: string; value: string }

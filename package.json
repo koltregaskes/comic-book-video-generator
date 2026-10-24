@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "check": "tsc -b && vite build",
     "lint": "eslint .",
+    "test:package": "node --experimental-strip-types --test tests/project-package.test.ts",
     "preview": "vite preview --host 127.0.0.1 --port 4303"
   },
   "dependencies": {
