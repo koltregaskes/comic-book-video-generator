@@ -1209,6 +1209,8 @@ export function parseProjectPackage(raw: string): ComicBookVideoProjectPackage {
           runtimeSeconds: Math.max(8, (scene.panelCount ?? scene.panels?.length ?? 1) * 3),
           transitionOut: scene.turnMoment ?? '',
           motionPlan: scene.summary ?? 'Translate the page beat into camera and panel movement.',
+          narrationNotes: 'Use imported dialogue and captions as narration candidates.',
+          soundNotes: 'Derive SFX from panel action and visual-prompt ambience.',
           beats: Array.isArray(scene.panels)
             ? scene.panels.map((panel, panelIndex) =>
                 createBeat({
@@ -1219,13 +1221,14 @@ export function parseProjectPackage(raw: string): ComicBookVideoProjectPackage {
                   movement: panel.action ?? '',
                   captionOverlay: panel.caption ?? '',
                   narration: panel.dialogue ?? '',
-                  soundCue: '',
+                  soundCue: panel.prompt ? 'Reference source visual prompt for ambience.' : '',
                 }),
               )
             : [],
         }),
       ),
-      notes: ['Imported from a comic-book package.'],
+      outputs: normalizeImportedOutputs(packageRecord.outputs, 'outputs'),
+      notes: ['Imported from a comic-book package.', ...normalizeList(packageRecord.notes)],
     })
   }
 

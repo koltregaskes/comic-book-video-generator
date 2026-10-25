@@ -327,6 +327,57 @@ describe('comic book video import validation', () => {
     assert.equal(firstImport.updatedAt, comicBookPackage.updatedAt)
     assert.equal(firstImport.scenes[0]?.id, 'import-page-source-page-a')
     assert.equal(firstImport.scenes[0]?.beats[0]?.id, 'import-panel-source-page-a-source-panel-a')
+    assert.deepEqual(firstImport.outputs, [])
+
+    const comicWithDeliverables = {
+      ...comicBookPackage,
+      scenes: [
+        comicBookPackage.scenes[0],
+        {
+          id: 'source-page-b',
+          pageNumber: 4,
+          title: 'After the door',
+          panelCount: 1,
+          summary: 'Hold on the reaction.',
+          turnMoment: 'Cut to Vera.',
+          panels: [
+            {
+              id: 'source-panel-b',
+              panelNumber: 1,
+              action: 'Vera recoils from the opening door.',
+              caption: 'Too late.',
+              dialogue: '',
+              prompt: 'Close comic panel, thief recoiling in cyan light.',
+            },
+          ],
+        },
+      ],
+      outputs: [
+        {
+          id: 'output-1',
+          label: 'Issue package',
+          status: 'planned',
+          target: 'Comic package JSON export',
+          format: 'json',
+          notes: 'Primary structured export.',
+        },
+      ],
+      notes: ['Keep the glyph language.'],
+    }
+    const importedWithDeliverables = parseProjectPackage(JSON.stringify(comicWithDeliverables))
+    const deliverablePlan = createRenderOrchestrationPlan(importedWithDeliverables)
+
+    assert.equal(importedWithDeliverables.outputs[0]?.id, 'output-1')
+    assert.equal(importedWithDeliverables.outputs[0]?.label, 'Issue package')
+    assert.equal(importedWithDeliverables.outputs[0]?.target, 'Comic package JSON export')
+    assert.equal(importedWithDeliverables.notes.includes('Imported from a comic-book package.'), true)
+    assert.equal(importedWithDeliverables.notes.includes('Keep the glyph language.'), true)
+    assert.equal(
+      importedWithDeliverables.scenes[0]?.beats[0]?.soundCue,
+      'Reference source visual prompt for ambience.',
+    )
+    assert.match(importedWithDeliverables.scenes[0]?.soundNotes ?? '', /visual-prompt/)
+    assert.equal(deliverablePlan.issues.some((issue) => issue.code === 'missing-delivery-output'), false)
   })
 
   it('reorders sequences and beat blocks only when the requested order is complete', () => {
