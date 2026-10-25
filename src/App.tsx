@@ -754,6 +754,17 @@ function App() {
                 onAddBeat={() => addBeat(sequence.id)}
                 onUpdateBeat={(beatId, patch) => updateBeat(project, sequence.id, beatId, persist, patch)}
                 onMoveBeat={(beatId, direction) => moveBeat(sequence.id, beatId, direction)}
+                onRemoveBeat={(beatId) =>
+                  updateProject((current) => ({
+                    ...current,
+                    scenes: current.scenes.map((item) =>
+                      item.id === sequence.id
+                        ? { ...item, beats: item.beats.filter((beat) => beat.id !== beatId) }
+                        : item,
+                    ),
+                    updatedAt: new Date().toISOString(),
+                  }))
+                }
               />
             ))}
           </div>
@@ -867,6 +878,7 @@ type SequenceEditorProps = {
   onAddBeat: () => void
   onUpdateBeat: (beatId: string, patch: Partial<MotionBeat>) => void
   onMoveBeat: (beatId: string, direction: -1 | 1) => void
+  onRemoveBeat: (beatId: string) => void
 }
 
 function SequenceEditor({
@@ -880,6 +892,7 @@ function SequenceEditor({
   onAddBeat,
   onUpdateBeat,
   onMoveBeat,
+  onRemoveBeat,
 }: SequenceEditorProps) {
   return (
     <article className="stack-card cinematic-card">
@@ -965,6 +978,9 @@ function SequenceEditor({
                   onClick={() => onMoveBeat(beat.id, 1)}
                 >
                   Move Down
+                </button>
+                <button className="ghost tiny" onClick={() => onRemoveBeat(beat.id)}>
+                  Remove Beat
                 </button>
               </div>
             </div>
