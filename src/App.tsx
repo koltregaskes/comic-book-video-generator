@@ -9,6 +9,7 @@ import {
   type OperationFeedback,
 } from './app-control-contract'
 import {
+  createNarrationSrt,
   createRenderHandoffManifest,
   createRenderOrchestrationPlan,
   exportProjectPackage,
@@ -265,6 +266,23 @@ function App() {
       setOperationFeedback({
         tone: 'error',
         message: 'Cue sheet copy failed',
+        details: error instanceof Error ? error.message : 'Check browser clipboard permissions.',
+      })
+    }
+  }
+
+  const handleCopyText = async (label: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setOperationFeedback({
+        tone: 'success',
+        message: `Copied ${label}`,
+        details: 'The narration SRT is on the clipboard. No media render or external connector was started.',
+      })
+    } catch (error) {
+      setOperationFeedback({
+        tone: 'error',
+        message: `${label} copy failed`,
         details: error instanceof Error ? error.message : 'Check browser clipboard permissions.',
       })
     }
@@ -556,6 +574,12 @@ function App() {
             onClick={() => handleCopyArtifact('narration script', renderHandoffManifest.narrationScript)}
           >
             Copy Narration JSON
+          </button>
+          <button
+            className="secondary tiny"
+            onClick={() => handleCopyText('narration SRT', createNarrationSrt(renderHandoffManifest.narrationScript))}
+          >
+            Copy Narration SRT
           </button>
           <button
             className="secondary tiny"

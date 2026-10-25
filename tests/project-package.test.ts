@@ -12,6 +12,7 @@ import {
 import {
   analyseTimelineConsistency,
   createComicBookVideoProject,
+  createNarrationSrt,
   createRenderOrchestrationPlan,
   createRenderHandoffManifest,
   parseProjectPackage,
@@ -463,6 +464,80 @@ describe('comic book video import validation', () => {
       ['sfx-beat-a1', 'sfx-beat-a2', 'sfx-beat-b1', 'sfx-beat-b2'],
     )
     assert.equal(manifest.outputs[0]?.id, 'output-cut-ready')
+    assert.equal(
+      createNarrationSrt(manifest.narrationScript),
+      [
+        '1',
+        '00:00:00,000 --> 00:00:04,000',
+        'The archive waits below.',
+        '',
+        '2',
+        '00:00:04,000 --> 00:00:08,000',
+        'Open it before the tide turns.',
+        '',
+        '3',
+        '00:00:14,000 --> 00:00:18,000',
+        'It knows the way.',
+        '',
+      ].join('\n'),
+    )
+  })
+
+  it('formats narration SRT from cue text and skips empty cues', () => {
+    const srt = createNarrationSrt([
+      {
+        id: 'narration-both',
+        sequenceId: 'sequence-a',
+        beatId: 'beat-both',
+        sequenceTitle: 'Door approach',
+        beatLabel: 'Both',
+        sourcePanel: '1',
+        startSeconds: 1.5,
+        endSeconds: 2.25,
+        narration: 'Speak this.',
+        captionOverlay: 'Show this.',
+      },
+      {
+        id: 'narration-empty',
+        sequenceId: 'sequence-a',
+        beatId: 'beat-empty',
+        sequenceTitle: 'Door approach',
+        beatLabel: 'Empty',
+        sourcePanel: '2',
+        startSeconds: 3,
+        endSeconds: 4,
+        narration: '   ',
+        captionOverlay: '',
+      },
+      {
+        id: 'narration-reversed',
+        sequenceId: 'sequence-b',
+        beatId: 'beat-reversed',
+        sequenceTitle: 'Map ignition',
+        beatLabel: 'Reversed',
+        sourcePanel: '1',
+        startSeconds: 9,
+        endSeconds: 8,
+        narration: '',
+        captionOverlay: 'Held caption.',
+      },
+    ])
+
+    assert.equal(
+      srt,
+      [
+        '1',
+        '00:00:01,500 --> 00:00:02,250',
+        'Speak this.',
+        'Show this.',
+        '',
+        '2',
+        '00:00:08,000 --> 00:00:09,000',
+        'Held caption.',
+        '',
+      ].join('\n'),
+    )
+    assert.equal(createNarrationSrt([]), '')
   })
 
   it('turns validated upstream handoff imports into cut-ready render manifests', () => {
