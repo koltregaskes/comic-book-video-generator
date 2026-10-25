@@ -897,6 +897,43 @@ export function createRenderHandoffManifest(
   }
 }
 
+function formatSrtTimestamp(seconds: number) {
+  const totalMs = Math.round((Number.isFinite(seconds) ? Math.max(0, seconds) : 0) * 1000)
+  const milliseconds = totalMs % 1000
+  const totalSeconds = Math.floor(totalMs / 1000)
+  const secs = totalSeconds % 60
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  const minutes = totalMinutes % 60
+  const hours = Math.floor(totalMinutes / 60)
+  const pad = (value: number, width = 2) => String(value).padStart(width, '0')
+
+  return `${pad(hours)}:${pad(minutes)}:${pad(secs)},${pad(milliseconds, 3)}`
+}
+
+function narrationCueText(cue: NarrationCue) {
+  const narration = cue.narration.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim()
+  const caption = cue.captionOverlay.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim()
+
+  if (narration && caption && narration !== caption) return `${narration}\n${caption}`
+  return narration || caption
+}
+
+export function createNarrationSrt(cues: NarrationCue[]) {
+  const blocks = cues.flatMap((cue) => {
+    const text = narrationCueText(cue)
+    if (!text) return []
+
+    const start = Math.min(cue.startSeconds, cue.endSeconds)
+    const end = Math.max(cue.startSeconds, cue.endSeconds)
+
+    return [`${formatSrtTimestamp(start)} --> ${formatSrtTimestamp(end)}\n${text}`]
+  })
+
+  return blocks.length
+    ? `${blocks.map((block, index) => `${index + 1}\n${block}`).join('\n\n')}\n`
+    : ''
+}
+
 function taskStatus(hasIssue: boolean): RenderOrchestrationTaskStatus {
   return hasIssue ? 'needs-review' : 'ready'
 }
