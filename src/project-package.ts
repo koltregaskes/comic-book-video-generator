@@ -910,9 +910,20 @@ function formatSrtTimestamp(seconds: number) {
   return `${pad(hours)}:${pad(minutes)}:${pad(secs)},${pad(milliseconds, 3)}`
 }
 
+// A blank line ends an SRT cue, so paragraphs inside one cue become consecutive lines.
+function srtCueText(value: string) {
+  return value
+    .replaceAll('\r\n', '\n')
+    .replaceAll('\r', '\n')
+    .split('\n')
+    .filter((line) => line.trim())
+    .join('\n')
+    .trim()
+}
+
 function narrationCueText(cue: NarrationCue) {
-  const narration = cue.narration.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim()
-  const caption = cue.captionOverlay.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim()
+  const narration = srtCueText(cue.narration)
+  const caption = srtCueText(cue.captionOverlay)
 
   if (narration && caption && narration !== caption) return `${narration}\n${caption}`
   return narration || caption
