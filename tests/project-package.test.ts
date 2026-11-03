@@ -540,6 +540,122 @@ describe('comic book video import validation', () => {
     assert.equal(createNarrationSrt([]), '')
   })
 
+  const srtCue = (id: string, startSeconds: number, endSeconds: number, narration: string, captionOverlay: string) => ({
+    id: `narration-${id}`,
+    sequenceId: 'sequence-a',
+    beatId: id,
+    sequenceTitle: 'Door approach',
+    beatLabel: id,
+    sourcePanel: '1',
+    startSeconds,
+    endSeconds,
+    narration,
+    captionOverlay,
+  })
+
+  const parseSrtBlocks = (srt: string) =>
+    srt
+      .trimEnd()
+      .split('\n\n')
+      .map((block) => {
+        const [index, timing, ...text] = block.split('\n')
+        return { index, timing, text }
+      })
+
+  it('keeps multi-paragraph narration inside one SRT cue', () => {
+    const srt = createNarrationSrt([
+      srtCue('beat-multi', 0, 4, 'First paragraph.\n\nSecond paragraph.\n\n\n\nThird paragraph.', ''),
+      srtCue('beat-next', 4, 6, 'Next cue.', ''),
+    ])
+
+    assert.equal(
+      srt,
+      [
+        '1',
+        '00:00:00,000 --> 00:00:04,000',
+        'First paragraph.',
+        'Second paragraph.',
+        'Third paragraph.',
+        '',
+        '2',
+        '00:00:04,000 --> 00:00:06,000',
+        'Next cue.',
+        '',
+      ].join('\n'),
+    )
+  })
+
+  it('keeps a multi-paragraph caption that differs from narration inside one SRT cue', () => {
+    const srt = createNarrationSrt([
+      srtCue('beat-caption', 2, 5, 'Spoken line one.\n\nSpoken line two.', 'Caption one.\n\n  \n\nCaption two.'),
+    ])
+
+    assert.equal(
+      srt,
+      [
+        '1',
+        '00:00:02,000 --> 00:00:05,000',
+        'Spoken line one.',
+        'Spoken line two.',
+        'Caption one.',
+        'Caption two.',
+        '',
+      ].join('\n'),
+    )
+  })
+
+  it('normalises CRLF and strips leading and trailing blank lines in SRT cues', () => {
+    const srt = createNarrationSrt([
+      srtCue('beat-crlf', 0, 3, 'Windows line one.\r\n\r\nWindows line two.\rOld Mac line.', ''),
+      srtCue('beat-padded', 3, 5, '\n\n  \nPadded narration.\n\n\n', '\r\n\r\nPadded narration.\r\n'),
+      srtCue('beat-blank-only', 5, 6, '\n\n\r\n  \n', '\r\n\t\r\n'),
+    ])
+
+    assert.equal(
+      srt,
+      [
+        '1',
+        '00:00:00,000 --> 00:00:03,000',
+        'Windows line one.',
+        'Windows line two.',
+        'Old Mac line.',
+        '',
+        '2',
+        '00:00:03,000 --> 00:00:05,000',
+        'Padded narration.',
+        '',
+      ].join('\n'),
+    )
+    assert.equal(srt.includes('\r'), false)
+  })
+
+  it('emits only well-formed SRT blocks and keeps every paragraph', () => {
+    const cues = [
+      srtCue('beat-1', 0, 4, 'The tide is coming.\n\nWe have minutes.', 'THE TIDE\n\nIS COMING'),
+      srtCue('beat-2', 4, 9, '\r\n\r\nShe lifts the lantern.\r\n\r\n\r\nThe glyphs answer.\r\n', ''),
+      srtCue('beat-3', 9, 12, '', '\n\nBOOM.\n\n\nCRACK.\n\n'),
+    ]
+    const srt = createNarrationSrt(cues)
+    const blocks = parseSrtBlocks(srt)
+
+    assert.equal(blocks.length, 3)
+    blocks.forEach((block, position) => {
+      assert.equal(block.index, String(position + 1))
+      assert.match(block.timing ?? '', /^\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}$/)
+      assert.ok(block.text.length > 0)
+      block.text.forEach((line) => assert.ok(line.trim(), `block ${block.index} has an empty text line`))
+    })
+
+    const exportedText = blocks.flatMap((block) => block.text)
+    const paragraphs = cues.flatMap((cue) =>
+      `${cue.narration}\n${cue.captionOverlay}`
+        .split(/\r\n|\r|\n/)
+        .map((line) => line.trim())
+        .filter(Boolean),
+    )
+    paragraphs.forEach((paragraph) => assert.ok(exportedText.includes(paragraph), `missing paragraph: ${paragraph}`))
+  })
+
   it('turns validated upstream handoff imports into cut-ready render manifests', () => {
     const importedProject = parseProjectPackage(JSON.stringify(queueHandoffPackage))
     const manifest = createRenderHandoffManifest(importedProject)
